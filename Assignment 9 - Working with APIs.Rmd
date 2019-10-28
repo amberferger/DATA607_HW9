@@ -1,0 +1,120 @@
+---
+title: 'Homework 9: Web APIs'
+author: "Amber Ferger"
+date: "10/27/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Assignment
+The New York Times web site provides a rich set of APIs, as described here: https://developer.nytimes.com/apis
+
+You’ll need to start by signing up for an API key. Your task is to choose one of the New York Times APIs, construct an interface in R to read in the JSON data, and
+transform it into an R DataFrame.
+
+## Libraries
+For this assignment, I will be using the tidyverse and stringr packages for data tidying/structuring, jsonlite package for data import, and ggplot to visualize the data. 
+``` {r, message=FALSE}
+
+library(tidyverse)
+library(jsonlite)
+library(stringr)
+library(ggplot2)
+
+```
+
+## Connect to the API
+I will be using the **Top Stories** API, filtered for the following sections: 
+
+* Science
+* Technology
+* Health
+
+Let's first read in the data from the API: 
+
+``` {r, echo = FALSE}
+apiKey <- 'nbj9OSxkzYqh0vGOf512L5CIIefbmDhr'
+```
+
+``` {r}
+
+url <- paste("https://api.nytimes.com/svc/topstories/v2/science.json?api-key=", apiKey, sep='')
+
+scienceData <- fromJSON(url) %>% 
+  as.data.frame() %>%
+  select(-results.multimedia)
+
+url2 <- paste("https://api.nytimes.com/svc/topstories/v2/technology.json?api-key=", apiKey, sep='')
+
+techData <- fromJSON(url2) %>% 
+  as.data.frame() %>%
+  select(-results.multimedia)
+
+url3 <- paste("https://api.nytimes.com/svc/topstories/v2/health.json?api-key=", apiKey, sep='')
+
+healthData <- fromJSON(url3) %>% 
+  as.data.frame() %>%
+  select(-results.multimedia)
+
+```
+
+
+## Tidy the Data
+Now that we have the data loaded in, let's bind all of our sets and then clean it up a bit. First, let's subset it to just the info we would like to see:
+``` {r}
+
+finalData <- rbind(scienceData,techData,healthData)
+
+finalData <- finalData %>%
+  select(last_updated,results.published_date,results.section,results.subsection, results.title,results.abstract,results.url, results.byline, results.des_facet)
+
+```
+
+Next, we'll rename our columns:
+```{r}
+
+colnames <- c('LAST_UPDATED', 'PUBLISHED_DATE', 'WEBSITE_SECTION' , 'WEBSITE_SUBSECTION', 'TITLE', 'ABSTRACT', 'URL', 'AUTHOR', 'TAGS')
+
+colnames(finalData) <- colnames
+
+```
+
+Now, we'll clean up the AUTHOR column by removing the word *by*.
+
+```{r}
+finalData$AUTHOR <- str_replace(finalData$AUTHOR,'By ','')
+
+```
+
+The last thing we can do is unlist all of the tags that appear in the TAGS column. This will allow us to more easily analyze the data -- each record in the final dataset will represent an article with one of its tags. 
+
+```{r}
+
+finalData <- unnest(finalData, TAGS)
+head(finalData)
+
+```
+
+## Analyze
+Now that we have the data tidied up, we can take a look at it! First, let's look at the tags in the list to see if there are any trends. 
+
+```{r}
+
+
+finalCounts <- as.data.frame(table(finalData$TAGS)%>% sort(decreasing= TRUE))
+colnames(finalCounts) <- c('Tag', 'Frequency')
+
+top_n(finalCounts, n=20, Frequency) %>%
+          ggplot(., aes(x=Tag, y=Frequency))+
+              geom_bar(stat='identity') + 
+  ggtitle("Top tags for NY Times articles") + 
+  xlab("Tag") + ylab("Number of articles") +
+  theme(axis.text.x = element_text(angle = 90))
+
+```
+
+## Conclusions
+Interestingly, the top tag for articles listed on the NY Times Science, Tech, and Health websites are "your-feed-science", "Compuers and the Internet", "Research", and "United States Politics and Government". Since this data is updated regularly, it would be interesting to see how it changes over time. (Future project?) It would also be interesting to add in data from some of the other sections of the NY Times website as well. 
